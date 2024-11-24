@@ -139,6 +139,12 @@ class MessageController {
 
   async handleMessage(msg: Message) {
     try {
+            const whiteList = ['56966600989@c.us', '56986885166@c.us', '56993203847@c.us'];
+
+            if (!whiteList.includes(msg.from)) {
+                console.log('Unauthorized user:', msg.from);
+                return;
+            }
       if (!CONTACT_WHITELIST.includes(msg.from)) {
         console.log("Unauthorized user:", msg.from);
         return;
