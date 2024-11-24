@@ -81,7 +81,16 @@ class MessageController {
                                 await this.whatsappClient.sendMessage(msg.from, message);
                             }
                             return;
-                        } else {
+                        } 
+                        // Make daily check-in at morningCheckInTime and eveningCheckInTime
+                        else if (new Date().getHours() >= user.morningCheckInTime.getHours() || new Date().getHours() >= user.eveningCheckInTime.getHours()) {
+                            this.conversations.set(msg.from, 
+                                {
+                                handler : new CheckInHandler(msg.from, generateUserContext(user)),
+                                lastInteraction: new Date()
+                                });
+                        }
+                        else {
                             console.log('User already exists:', msg.from);
                             this.conversations.set(msg.from, 
                                 {
