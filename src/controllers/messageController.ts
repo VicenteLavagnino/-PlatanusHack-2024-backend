@@ -4,6 +4,8 @@ import type { Message } from "whatsapp-web.js";
 import generateUserContext from "../utils/generateUserContext";
 import prisma from "../lib/prisma";
 import { Client as WhatsappClient } from "whatsapp-web.js";
+import { HolidayHandler } from '../handlers/holidayHandler';
+import { holidays } from '../data/holidays';
 import _ from 'lodash';
 
 const CONVERSATION_TIMEOUT = 45 * 60 * 1000; // 45 minutes
@@ -41,9 +43,43 @@ class MessageController {
   }
 
   async initializeBot() {
-    console.log("Initializing bot...");
-    console.log("Bot initialization complete! 🤖✨");
-  }
+        try {
+            console.log('Initializing bot...');
+            
+            // Schedule holiday checks to run at 9 AM daily
+            const scheduleNextCheck = () => {
+                const now = new Date();
+                const nextCheck = new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate(),
+                    9, // 9 AM
+                    0, // 0 minutes
+                    0  // 0 seconds
+                );
+                
+                // If it's already past 9 AM, schedule for tomorrow
+                if (now.getHours() >= 9) {
+                    nextCheck.setDate(nextCheck.getDate() + 1);
+                }
+                
+                const msUntilNextCheck = nextCheck.getTime() - now.getTime();
+                
+                // Schedule next check
+                setTimeout(() => {
+                    this.checkHolidays();
+                    // Set up daily interval after first check
+                    setInterval(() => this.checkHolidays(), 24 * 60 * 60 * 1000);
+                }, msUntilNextCheck);
+            };
+            
+            scheduleNextCheck();
+            console.log('Bot initialization complete! 🤖✨');
+        } catch (error) {
+            console.error('Error initializing bot:', error);
+            throw error;
+        }
+    }
 
   private async sendQueuedMessages(userId: string, messages: string[]) {
     const conversation = this.activeConversations.get(userId);
@@ -177,6 +213,50 @@ class MessageController {
       );
     }
   }
+
+  private async checkHolidays(): Promise<void> {
+        const today = new Date();
+        const twoDaysFromNow = new Date(today);
+        twoDaysFromNow.setDate(today.getDate() + 2);
+        
+        // Format dates to MM-DD for comparison
+        const formatDate = (date: Date) => {
+            return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        };
+        
+        const todayFormatted = formatDate(today);
+        const twoDaysFormatted = formatDate(twoDaysFromNow);
+        
+        // Check for upcoming holidays
+        const upcomingHolidays = holidays.filter(holiday => 
+            holiday.date === todayFormatted || holiday.date === twoDaysFormatted
+        );
+        
+        if (upcomingHolidays.length > 0) {
+            // Get all active users
+            const activeUsers = await prisma.user.findMany({
+                where: { isActive: true }
+            });
+            
+            // Send holiday check-ins
+            for (const user of activeUsers) {
+                if (this.activeConversations.has(user.phoneNumber)) {
+                    continue;
+                }
+                for (const holiday of upcomingHolidays) {
+                    const handler = new HolidayHandler(
+                        user.id,
+                        holiday
+                    );
+                    
+                    const messages = await handler.handleMessage(null);
+                    for (const message of messages) {
+                        await this.whatsappClient.sendMessage(user.phoneNumber, message);
+                    }
+                }
+            }
+        }
+    }
 }
 
 export default MessageController;
