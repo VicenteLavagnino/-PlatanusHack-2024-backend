@@ -37,6 +37,12 @@ class MessageController {
     
     async handleMessage(msg: Message) {
         try {
+            const whiteList = ['56966600989@c.us', '56986885166@c.us', '56993203847@c.us'];
+
+            if (!whiteList.includes(msg.from)) {
+                console.log('Unauthorized user:', msg.from);
+                return;
+            }
             // Use transaction to handle race condition
             // await prisma.$transaction(async (tx) => {
             //     const user = await tx.user.select({
@@ -72,16 +78,30 @@ class MessageController {
 
                         if (!user) {
                             console.log('Starting onboarding for user:', msg.from);
-                            this.conversations.set(msg.from, 
-                                {
-                                    handler: new OnboardingHandler(msg.from),
-                                    lastInteraction: new Date(),
+                            // this.conversations.set(msg.from, 
+                            //     {
+                            //         handler: new OnboardingHandler(msg.from),
+                            //         lastInteraction: new Date(),
 
-                            });
-                            for (const message of await this.conversations.get(msg.from).handler.handleMessage(msg.body)) {
-                                await this.whatsappClient.sendMessage(msg.from, message);
-                            }
-                            return;
+                            // });
+                            const user = await prisma.user.create(
+                                {data: {
+                                    name: 'Agustín',
+                                    phoneNumber: msg.from,
+                                    gender: "MALE",
+                                    age: 23,
+                                    relationshipStatus: "SINGLE",
+                                    workStatus: "STUDENT",
+                                    homeStatus: "LIVES_WITH_FAMILY",
+                                    triggers: [],
+                                    copingStrategies: [],
+                                    sobrietyStartDate: new Date(),
+                                }})
+
+                            // for (const message of await this.conversations.get(msg.from).handler.handleMessage(msg.body)) {
+                            //     await this.whatsappClient.sendMessage(msg.from, message);
+                            // }
+                            await this.whatsappClient.sendMessage(msg.from, 'Bienvenido')
                         } 
                         // Make daily check-in at morningCheckInTime and eveningCheckInTime
                         else if (new Date().getHours() >= user.morningCheckInTime.getHours() || new Date().getHours() >= user.eveningCheckInTime.getHours()) {
@@ -98,6 +118,9 @@ class MessageController {
                                 handler : new IdleHandler(msg.from, generateUserContext(user)),
                                 lastInteraction: new Date()
                                 });
+                            for (const message of await this.conversations.get(msg.from).handler.handleMessage(msg.body)) {
+                                await this.whatsappClient.sendMessage(msg.from, message);
+                            }
                         }
                         }
                 
